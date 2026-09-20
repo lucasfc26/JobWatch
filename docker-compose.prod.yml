@@ -1,25 +1,25 @@
-# Production overrides. Use together with the base compose file:
+# Production overlay. Use with the base compose file:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
-# Secrets (POSTGRES_PASSWORD, JWT_SECRET, ...) must be provided via a real
-# `.env` file or the deployment platform's secret store — this file has no
-# insecure defaults for them, unlike the dev compose file.
+# Postgres/Redis/API/extractor stay on the internal Docker network
+# (no 5432/6379/3000/8100 on the host). Proxy is only 127.0.0.1:18083.
 
 services:
   postgres:
     restart: always
-    ports: !reset [] # not reachable from outside the Docker network in production
+    ports: !override []
 
   redis:
     restart: always
-    ports: !reset []
+    ports: !override []
 
   api:
     restart: always
     environment:
       NODE_ENV: production
-    ports: !reset [] # only the reverse proxy is exposed publicly
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://jobwatch.maselcorp.com.br}
+    ports: !override []
 
   worker:
     restart: always
@@ -29,7 +29,7 @@ services:
 
   warehouse-extractor:
     restart: always
-    ports: !reset []
+    ports: !override []
 
   frontend:
     build:
@@ -50,10 +50,7 @@ services:
     volumes:
       - ./deploy/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./deploy/nginx/certs:/etc/nginx/certs:ro
-    # Bind to localhost so this does not fight the host's nginx (Ubuntu)
-    # for :80/:443. On maselcorp the site jobwatch.maselcorp.com.br already
-    # proxies to 127.0.0.1:18083 — keep PROXY_HTTP_PORT in sync with that.
-    # Set PROXY_BIND=0.0.0.0 only if this container should be the public edge.
-    ports:
-      - '${PROXY_BIND:-127.0.0.1}:${PROXY_HTTP_PORT:-18083}:80'
-      - '${PROXY_BIND:-127.0.0.1}:${PROXY_HTTPS_PORT:-18443}:443'
+    # Hardcoded localhost:18083 — matches /etc/nginx/sites-enabled/jobwatch.maselcorp.com.br.
+    # Not 80/443 (Ubuntu nginx). Not 18080-18082 (Status Energy / Sal Energia).
+    ports: !override
+      - '127.0.0.1:18083:80'
