@@ -8,6 +8,7 @@ import re
 import time
 from typing import Any
 
+import run_progress as progress
 from trawl_browser import (
     attach_trawl_init_script,
     kill_extractor_browsers,
@@ -1792,8 +1793,13 @@ def run_amazon_warehouse_search(filters: dict[str, Any]) -> list[dict[str, str]]
     kill_extractor_browsers()
     try:
         return _run_amazon_warehouse_search(filters, headless, collected)
+    except Exception as error:
+        progress.fail(str(error))
+        raise
     finally:
+        progress.begin("close", "Encerrando o navegador e processos restantes")
         kill_extractor_browsers()
+        progress.finish("close")
 
 
 def _run_amazon_warehouse_search(
@@ -1801,10 +1807,12 @@ def _run_amazon_warehouse_search(
     headless: bool,
     collected: dict[str, dict[str, str]],
 ) -> list[dict[str, str]]:
+    progress.begin("launch", "Iniciando o navegador" + (" (headless)" if headless else " (janela visível)"))
     with open_camoufox(headless) as browser:
         page = browser.new_page()
         page.set_default_timeout(15_000)
         attach_trawl_init_script(page)
+        progress.set_page(page)
 
         def on_response(response) -> None:
             url = response.url.lower()
@@ -1821,8 +1829,10 @@ def _run_amazon_warehouse_search(
                 return
 
         page.on("response", on_response)
+        progress.begin("navigate", JOB_SEARCH_URL)
         page.goto(JOB_SEARCH_URL, wait_until="domcontentloaded", timeout=60_000)
         _pause(2.5, 4.0)
+        progress.begin("overlays", "Procurando banners e botões de fechar")
         _dismiss_overlays(page)
         _pause(0.8, 1.4)
         _dismiss_overlays(page)
@@ -1832,39 +1842,48 @@ def _run_amazon_warehouse_search(
             raise RuntimeError("zipCode é obrigatório")
 
         collected.clear()
+        progress.begin("zip", zip_code)
         used_guide = _fill_guide_zip(page, zip_code)
         print(f"[warehouse] assistente={'sim' if used_guide else 'não'}", flush=True)
         _dismiss_overlays(page, generic_x=False)
 
         if used_guide:
             hours = filters.get("workHours")
+            progress.begin("hours", f"0–{hours} h/semana" if hours not in (None, "") else "sem limite definido")
             _set_hours(page, int(hours) if hours is not None and hours != "" else None)
 
+            progress.begin("schedule")
             _wait_wizard(page, "times work best")
             schedule = [item for item in (filters.get("schedule") or []) if item]
+            progress.detail(", ".join(schedule) if schedule else "nenhum turno informado — só avança")
             schedule_ok = _select_chips(page, schedule) if schedule else False
             _advance_wizard(page, selected=schedule_ok)
 
-            _wait_wizard(page, "how long are you planning")
             length = str(filters.get("length") or "").strip()
+            progress.begin("length", length or "nenhuma duração informada — só avança")
+            _wait_wizard(page, "how long are you planning")
             length_ok = _click_chip(page, length) if length else False
             if length and not length_ok:
                 print(f"[warehouse] não achei o chip '{length}'", flush=True)
             _advance_wizard(page, selected=length_ok)
 
-            _wait_wizard(page, "when can you start")
             when_start = str(filters.get("whenStart") or "").strip()
+            progress.begin("when", when_start or "nenhuma data informada — só avança")
+            _wait_wizard(page, "when can you start")
             when_ok = _select_when_start(page, when_start) if when_start else False
             if when_start and not when_ok:
                 print(f"[warehouse] não achei a opção '{when_start}'", flush=True)
             _advance_wizard(page, selected=when_ok, finish=True)
             collected.clear()
         else:
+            progress.skip("hours", "schedule", "length", "when", detail="assistente indisponível — usou a busca direta")
             _fill_search_zip(page, zip_code)
 
         job_title = str(filters.get("jobTitle") or "").strip()
+        progress.begin("title", job_title or "sem filtro por nome da vaga")
         _fill_job_name(page, job_title)
         _dismiss_overlays(page, generic_x=False)
+        progress.begin("results", "Aguardando o site aplicar os filtros")
         _wait_for_job_results(page)
         try:
             page.wait_for_timeout(3000)
@@ -1872,9 +1891,11 @@ def _run_amazon_warehouse_search(
             print("[warehouse] página fechou antes da coleta", flush=True)
             return []
 
+        progress.begin("collect")
         result_count = _visible_result_count(page)
         card_count = _count_job_cards(page)
         print(f"[warehouse] total visível={result_count} cards={card_count}", flush=True)
+        progress.detail(f"{result_count if result_count is not None else '?'} vagas visíveis, {card_count} cards no DOM")
         if result_count == 0 and card_count == 0:
             collected.clear()
             dom_jobs = []
@@ -1895,8 +1916,10 @@ def _run_amazon_warehouse_search(
         for job in dom_jobs:
             _store_job(collected, job)
 
+        progress.begin("details", f"{len(collected)} vaga(s) para detalhar")
         _enrich_job_details(page, list(collected.values()))
 
+        progress.begin("filter")
         jobs = []
         for raw in collected.values():
             normalized = _normalize_job(raw)
@@ -1909,6 +1932,8 @@ def _run_amazon_warehouse_search(
             f"[warehouse] {len(jobs)} vagas extraídas (json+dom={len(collected)} brutos)",
             flush=True,
         )
+        progress.detail(f"{len(jobs)} vaga(s) extraída(s)")
+        progress.shot()
         if not headless:
             watch_ms = int(os.environ.get("WATCH_SECONDS", "90")) * 1000
             print(f"[warehouse] janela aberta para validação por {watch_ms // 1000}s", flush=True)

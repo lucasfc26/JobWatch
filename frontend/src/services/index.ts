@@ -30,6 +30,8 @@ import type {
   UserSettings,
   PaginatedResponse,
   ApiInspectResult,
+  WarehouseFilters,
+  ExtractorRun,
 } from '@/types';
 
 // --- Auth ---
@@ -291,5 +293,21 @@ export const usersService = {
   },
   deleteAccount: async () => {
     await apiClient.delete('/users/me');
+  },
+};
+
+// --- Extractor ---
+export const extractorService = {
+  start: async (filters: WarehouseFilters): Promise<ExtractorRun> => {
+    const res = await apiClient.post<ExtractorRun>('/extractor/runs', filters);
+    return res.data;
+  },
+  current: async (): Promise<ExtractorRun | null> => {
+    const res = await apiClient.get<ExtractorRun | null>('/extractor/runs/current');
+    return res.data || null;
+  },
+  frame: async (id: string): Promise<Blob> => {
+    const res = await apiClient.get<Blob>(`/extractor/runs/${id}/frame`, { responseType: 'blob' });
+    return res.data;
   },
 };

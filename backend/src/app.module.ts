@@ -13,6 +13,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { SearchesModule } from './searches/searches.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ExtractorModule } from './extractor/extractor.module';
 import { QueuesModule } from './queues/queues.module';
 import { QueueServicesModule } from './queues/queue-services.module';
 
@@ -33,6 +34,7 @@ import { QueueServicesModule } from './queues/queue-services.module';
     SearchesModule,
     NotificationsModule,
     DashboardModule,
+    ExtractorModule,
   ],
   providers: [
     {

@@ -264,3 +264,45 @@ export interface UserSettings {
     timezone: string;
   };
 }
+
+// --- Extractor (live Camoufox run) ---
+export type ExtractorStepStatus = 'pending' | 'running' | 'done' | 'skipped' | 'error';
+export type ExtractorRunStatus = 'queued' | 'running' | 'done' | 'error';
+
+export interface ExtractorStep {
+  key: string;
+  label: string;
+  status: ExtractorStepStatus;
+  detail: string;
+  startedAt: number | null;
+  endedAt: number | null;
+}
+
+export interface ExtractorLogLine {
+  ts: number;
+  line: string;
+}
+
+export interface ExtractorJob {
+  externalId?: string;
+  title?: string;
+  url?: string;
+  location?: string;
+  jobType?: string;
+  salary?: string;
+  schedule?: string;
+}
+
+export interface ExtractorRun {
+  id: string;
+  status: ExtractorRunStatus;
+  headless: boolean;
+  error: string | null;
+  filters: WarehouseFilters;
+  startedAt: number;
+  finishedAt: number | null;
+  steps: ExtractorStep[];
+  logs: ExtractorLogLine[];
+  jobs: ExtractorJob[];
+  frameVersion: number;
+}

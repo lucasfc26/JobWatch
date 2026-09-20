@@ -2,8 +2,9 @@
 // JobWatch - TanStack Query Hooks
 // ============================================
 
+import { useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { JobFilters, NotificationFilters, UserSettings } from '@/types';
+import type { ExtractorRun, JobFilters, NotificationFilters, UserSettings, WarehouseFilters } from '@/types';
 import type { SearchFormPayload } from '@/lib/searchMapping';
 import {
   jobsService,
@@ -11,6 +12,7 @@ import {
   notificationsService,
   dashboardService,
   usersService,
+  extractorService,
 } from '@/services';
 import { REFRESH_INTERVAL } from '@/lib/constants';
 
@@ -280,4 +282,65 @@ export function useDeleteAccount() {
   return useMutation({
     mutationFn: () => usersService.deleteAccount(),
   });
+}
+
+// --- Extractor ---
+const EXTRACTOR_POLL_MS = 1200;
+
+export function useExtractorRun() {
+  return useQuery({
+    queryKey: ['extractor', 'run'],
+    queryFn: extractorService.current,
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'running' || status === 'queued' ? EXTRACTOR_POLL_MS : false;
+    },
+  });
+}
+
+export function useStartExtractorRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (filters: WarehouseFilters) => extractorService.start(filters),
+    onSuccess: (run: ExtractorRun) => qc.setQueryData(['extractor', 'run'], run),
+  });
+}
+
+export function useExtractorFrame(runId: string | undefined, version: number | undefined) {
+  const [url, setUrl] = useState<string | null>(null);
+  const currentUrl = useRef<string | null>(null);
+
+  const replaceUrl = (next: string | null) => {
+    if (currentUrl.current) URL.revokeObjectURL(currentUrl.current);
+    currentUrl.current = next;
+    setUrl(next);
+  };
+
+  useEffect(() => {
+    if (!runId || !version) {
+      replaceUrl(null);
+      return;
+    }
+    let cancelled = false;
+    extractorService
+      .frame(runId)
+      .then((blob) => {
+        if (!cancelled) replaceUrl(URL.createObjectURL(blob));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId, version]);
+
+  useEffect(
+    () => () => {
+      if (currentUrl.current) URL.revokeObjectURL(currentUrl.current);
+    },
+    [],
+  );
+
+  return url;
 }

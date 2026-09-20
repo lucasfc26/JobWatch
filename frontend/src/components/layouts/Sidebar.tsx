@@ -10,6 +10,7 @@ const operations = [
   { to: '/jobs', label: 'Vagas', icon: 'work_outline', badge: 'jobs' },
   { to: '/searches', label: 'Monitoramentos', icon: 'radar', badge: 'searches' },
   { to: '/notifications', label: 'Notificações', icon: 'notifications', badge: 'notifications' },
+  { to: '/extractor', label: 'Extrator', icon: 'smart_toy' },
 ] as const;
 
 interface SidebarProps {
